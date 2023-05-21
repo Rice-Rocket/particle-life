@@ -1,6 +1,6 @@
 {
     "n_types": 13,
-    "particle_per_type": 100,
+    "particle_per_type": 200,
     "attraction_matrix": [
         [
             0.02668098436487762,
