@@ -11,12 +11,8 @@ pub enum UIVisibility {
 
 #[derive(Resource, Clone)]
 pub struct UISettings {
-    pub attract_mean: f32,
-    pub attract_std: f32,
-    pub min_r_lower: f32,
-    pub min_r_upper: f32,
-    pub max_r_lower: f32,
-    pub max_r_upper: f32,
+    pub min_r: f32,
+    pub max_r: f32,
     pub friction: f32,
     pub speed: f32,
     pub flat_force: bool,
@@ -28,12 +24,8 @@ pub struct UISettings {
 impl Default for UISettings {
     fn default() -> Self {
         Self {
-            attract_mean: -0.05,
-            attract_std: 0.05,
-            min_r_lower: 0.5,
-            min_r_upper: 1.0,
-            max_r_lower: -10.0,
-            max_r_upper: 10.0,
+            min_r: 0.3,
+            max_r: 0.05,
             friction: 0.1,
             speed: 1.0,
             flat_force: false,

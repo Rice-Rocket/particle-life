@@ -2,6 +2,8 @@ use bevy::{prelude::*, render::{render_resource::{ShaderType, Buffer, BufferDesc
 use bytemuck::{Pod, Zeroable};
 use rand::Rng;
 
+// use crate::particle_life::TEXTURE_SIZE;
+
 use crate::particle_life::TEXTURE_SIZE;
 
 use super::{NUM_PARTICLES, NUM_PARTICLES_PER_TYPE, NUM_PARTICLE_TYPES};
@@ -12,8 +14,8 @@ use super::{NUM_PARTICLES, NUM_PARTICLES_PER_TYPE, NUM_PARTICLE_TYPES};
 pub struct Particle {
     pub pos: [f32; 2],
     pub vel: [f32; 2],
-    pub type_idx: u32,
     pub color: [f32; 3],
+    pub type_idx: u32,
 }
 
 impl Particle {
@@ -21,8 +23,8 @@ impl Particle {
         Self {
             pos: [0.0; 2],
             vel: [0.0; 2],
-            type_idx: 0,
             color: [0.0; 3],
+            type_idx: 0,
         }
     }
 }
@@ -32,6 +34,7 @@ pub struct ParticlesBuffer {
     pub storage: Buffer,
     pub staging: Buffer,
     pub vertex_data: Buffer,
+    pub index_data: Buffer,
     pub size: u64,
 }
 
@@ -54,16 +57,24 @@ impl FromWorld for ParticlesBuffer {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
         });
 
+        let (vertices, indices) = create_hexagon_data();
         let vertex_data = device.create_buffer_with_data(&BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[-0.01f32, -0.01, 0.01, -0.01, -0.01, 0.01, 0.01, 0.01]),
+            contents: bytemuck::cast_slice(&vertices),
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+        });
+
+        let index_data = device.create_buffer_with_data(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&indices),
+            usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
         });
 
         Self {
             storage,
             staging,
             vertex_data,
+            index_data,
             size,
         }
     }
@@ -87,17 +98,36 @@ fn create_particles() -> [Particle; NUM_PARTICLES as usize] {
         let c1cosz = c1.z.cos();
         let color = COLOR_A + COLOR_B * Vec3::new(c1cosx, c1cosy, c1cosz);
         for j in 0..NUM_PARTICLES_PER_TYPE {
-            let mut p = (i * NUM_PARTICLES_PER_TYPE + j) as f32 / NUM_PARTICLES as f32;
-            p = p * 2.0 - 1.0;
             particles[(i * NUM_PARTICLES_PER_TYPE + j) as usize] = Particle {
-                pos: [p * 0.9, 0.0],
-                // pos: [rng.gen_range(-1f32..1f32), rng.gen_range(-1f32..1f32)],
+                pos: [rng.gen_range(0f32..(TEXTURE_SIZE.0 as f32 / TEXTURE_SIZE.1 as f32)), rng.gen_range(0f32..1f32)],
                 vel: [0.0, 0.0],
-                type_idx: i,
                 color: [color.x, color.y, color.z],
+                type_idx: i,
             };
         }
     };
 
     return particles;
+}
+
+
+fn create_hexagon_data() -> (&'static [f32], &'static [u32]) {
+    const RADIUS: f32 = 0.01;
+    const HALF_R: f32 = RADIUS / 2.0;
+    const APOTHEM: f32 = 1.73205081 * HALF_R;
+
+    static VERTICES: [f32; 12] = [
+        -HALF_R, APOTHEM, HALF_R, APOTHEM,
+        RADIUS, 0.0, HALF_R, -APOTHEM,
+        -HALF_R, -APOTHEM, -RADIUS, 0.0,
+    ];
+
+    static INDICES: [u32; 12] = [
+        0, 2, 1, 
+        0, 3, 2,
+        0, 4, 3, 
+        0, 5, 4,
+    ];
+
+    (&VERTICES, &INDICES)
 }

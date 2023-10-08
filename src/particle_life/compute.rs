@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
-use bevy::{prelude::*, render::{render_resource::{RawFragmentState, BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, BindGroupLayout, CachedComputePipelineId, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindingType, StorageTextureAccess, TextureFormat, TextureViewDimension, BufferBindingType, BufferSize, PipelineCache, ComputePipelineDescriptor, CachedPipelineState, ComputePassDescriptor, RawRenderPipelineDescriptor, PipelineLayoutDescriptor, RawVertexState, VertexState, RawVertexBufferLayout, VertexBufferLayout, VertexStepMode, VertexAttribute, VertexFormat, RenderPipelineDescriptor, FragmentState, PrimitiveState, MultisampleState, AsBindGroupShaderType, ShaderModuleDescriptor, ShaderSource, ColorTargetState, ColorWrites, CachedRenderPipelineId, RenderPassDescriptor, RenderPassColorAttachment, Operations, TextureSampleType, SamplerBindingType, LoadOp}, render_asset::RenderAssets, renderer::{RenderDevice, RenderContext}, render_graph, texture::BevyDefault}, reflect::TypeData};
+use bevy::{prelude::*, render::{render_resource::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, BindGroupLayout, CachedComputePipelineId, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindingType, TextureFormat, TextureViewDimension, BufferBindingType, BufferSize, PipelineCache, ComputePipelineDescriptor, CachedPipelineState, ComputePassDescriptor, VertexState, VertexBufferLayout, VertexStepMode, VertexAttribute, VertexFormat, RenderPipelineDescriptor, FragmentState, PrimitiveState, MultisampleState, ColorTargetState, ColorWrites, CachedRenderPipelineId, RenderPassDescriptor, RenderPassColorAttachment, Operations, TextureSampleType, IndexFormat}, render_asset::RenderAssets, renderer::{RenderDevice, RenderContext}, render_graph, texture::BevyDefault}};
 
-use super::{NUM_PARTICLES, WORKGROUP_SIZE, TEXTURE_SIZE, texture::ParticleLifeImage, buffers::{ParticlesBuffer, Particle}, ui::UISettings, settings::SettingsBuffer};
+use super::{NUM_PARTICLES, WORKGROUP_SIZE, texture::ParticleLifeImage, buffers::ParticlesBuffer, ui::UISettings, settings::SettingsBuffer};
 
 
 #[derive(Resource)]
@@ -30,7 +30,10 @@ pub fn queue_bind_group(
         layout: &pipeline.settings_bind_group_layout,
         entries: &[BindGroupEntry {
             binding: 0,
-            resource: particle_life_settings.buffer.binding().unwrap(),
+            resource: particle_life_settings.settings.binding().unwrap(),
+        }, BindGroupEntry {
+            binding: 1,
+            resource: particle_life_settings.attraction_tables.binding().unwrap(),
         }],
     });
     let view = &gpu_images[&particle_life_image.0];
@@ -38,8 +41,11 @@ pub fn queue_bind_group(
         label: None,
         layout: &pipeline.render_layout,
         entries: &[BindGroupEntry {
-            binding: 0,
-            resource: BindingResource::TextureView(&view.texture_view),
+        //     binding: 0,
+        //     resource: BindingResource::TextureView(&view.texture_view),
+        // }, BindGroupEntry {
+            binding: 1,
+            resource: particle_life_settings.aspect_ratio.binding().unwrap(),
         }]
     });
     commands.insert_resource(ParticleLifeBindGroups(bind_group_buf, bind_group_settings, bind_group_draw));
@@ -88,21 +94,41 @@ impl FromWorld for ParticleLifePipeline {
                             min_binding_size: None,
                         },
                         count: None,
+                    }, BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Storage {
+                                read_only: true,
+                            },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     }]
                 });
         let render_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: None,
             entries: &[
                 BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
+                    // binding: 0,
+                    // visibility: ShaderStages::FRAGMENT,
+                    // ty: BindingType::Texture {
+                    //     sample_type: TextureSampleType::Float { filterable: true },
+                    //     view_dimension: TextureViewDimension::D2,
+                    //     multisampled: false,
+                    // },
+                    // count: None,
+                // }, BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
                     count: None,
-                },
+                }
             ],
         });
         let compute_shader = world
@@ -114,7 +140,7 @@ impl FromWorld for ParticleLifePipeline {
         let pipeline_cache = world.resource::<PipelineCache>();
         let render_pipeline = pipeline_cache.queue_render_pipeline(RenderPipelineDescriptor {
             label: None,
-            layout: vec![],
+            layout: vec![render_layout.clone()],
             push_constant_ranges: vec![],
             vertex: VertexState {
                 shader: draw_shader.clone(),
@@ -132,9 +158,13 @@ impl FromWorld for ParticleLifePipeline {
                         offset: std::mem::size_of::<[f32; 2]>() as u64,
                         shader_location: 1,
                     }, VertexAttribute {
-                        format: VertexFormat::Float32x4,
-                        offset: 2 * std::mem::size_of::<[f32; 2]>() as u64,
+                        format: VertexFormat::Float32x3,
+                        offset: std::mem::size_of::<[f32; 4]>() as u64,
                         shader_location: 2,
+                    }, VertexAttribute {
+                        format: VertexFormat::Float32,
+                        offset: std::mem::size_of::<[f32; 7]>() as u64,
+                        shader_location: 3,
                     }]
                 }, VertexBufferLayout {
                     array_stride: 2 * 4,
@@ -142,7 +172,7 @@ impl FromWorld for ParticleLifePipeline {
                     attributes: vec![VertexAttribute {
                         format: VertexFormat::Float32x2,
                         offset: 0,
-                        shader_location: 3,
+                        shader_location: 4,
                     }]
                 }],
             },
@@ -180,7 +210,6 @@ impl FromWorld for ParticleLifePipeline {
 }
 
 enum ParticleLifeState {
-    Loading,
     Init,
     Waiting,
     Update,
@@ -204,13 +233,6 @@ impl render_graph::Node for ParticleLifeNode {
         let pipeline_cache = world.resource::<PipelineCache>();
 
         match self.state {
-            ParticleLifeState::Loading => {
-                // if let CachedPipelineState::Ok(_) =
-                //     pipeline_cache.get_compute_pipeline_state(pipeline.init_pipeline)
-                // {
-                //     self.state = ParticleLifeState::Init;
-                // }
-            }
             ParticleLifeState::Init => {
                 if let CachedPipelineState::Ok(_) =
                     pipeline_cache.get_compute_pipeline_state(pipeline.update_pipeline)
@@ -243,6 +265,7 @@ impl render_graph::Node for ParticleLifeNode {
     ) -> Result<(), render_graph::NodeRunError> {
         let particles_buf_bind_group = &world.resource::<ParticleLifeBindGroups>().0;
         let settings_bind_group = &world.resource::<ParticleLifeBindGroups>().1;
+        let aspect_ratio_bind_group = &world.resource::<ParticleLifeBindGroups>().2;
         let particles_buf = &world.resource::<ParticlesBuffer>();
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ParticleLifePipeline>();
@@ -255,14 +278,7 @@ impl render_graph::Node for ParticleLifeNode {
             compute_pass.set_bind_group(1, settings_bind_group, &[]);
 
             match self.state {
-                ParticleLifeState::Loading => {}
-                ParticleLifeState::Init => {
-                    // let init_pipeline = pipeline_cache
-                    //     .get_compute_pipeline(pipeline.init_pipeline)
-                    //     .unwrap();
-                    // compute_pass.set_pipeline(init_pipeline);
-                    // compute_pass.dispatch_workgroups(NUM_PARTICLES / WORKGROUP_SIZE, 1, 1);
-                }
+                ParticleLifeState::Init => {}
                 ParticleLifeState::Waiting => {}
                 ParticleLifeState::Update => {
                     let update_particles_pipeline = pipeline_cache
@@ -292,7 +308,9 @@ impl render_graph::Node for ParticleLifeNode {
                 })],
                 depth_stencil_attachment: None,
             });
-
+            
+            render_pass.set_bind_group(0, &aspect_ratio_bind_group, &[]);
+            
             match self.state {
                 ParticleLifeState::Update | ParticleLifeState::Waiting => {
                     let render_pipeline = pipeline_cache
@@ -301,7 +319,8 @@ impl render_graph::Node for ParticleLifeNode {
                     render_pass.set_pipeline(render_pipeline);
                     render_pass.set_vertex_buffer(0, *particles_buf.staging.slice(..));
                     render_pass.set_vertex_buffer(1, *particles_buf.vertex_data.slice(..));
-                    render_pass.draw(0..3, 0..NUM_PARTICLES);
+                    render_pass.set_index_buffer(*particles_buf.index_data.slice(..), IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..12, 0, 0..NUM_PARTICLES);
                 },
                 _ => ()
             }

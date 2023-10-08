@@ -10,13 +10,11 @@ pub mod ui;
 
 
 pub const NUM_PARTICLE_TYPES: u32 = 2;
-pub const NUM_PARTICLES_PER_TYPE: u32 = 32;
+pub const NUM_PARTICLES_PER_TYPE: u32 = 128;
 pub const NUM_PARTICLES: u32 = NUM_PARTICLE_TYPES * NUM_PARTICLES_PER_TYPE;
 
 pub const TEXTURE_SIZE: (u32, u32) = (1280, 720);
-// pub const TEXTURE_SIZE: (u32, u32) = (640, 360);
 pub const WORKGROUP_SIZE: u32 = 64;
-pub const INITIAL_STATE: &str = "initAgentsInwardRing";
 
 
 #[derive(States, Default, Debug, Hash, Eq, PartialEq, Clone)]
