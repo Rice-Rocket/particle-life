@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
-use bevy::{prelude::*, render::{render_resource::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, BindGroupLayout, CachedComputePipelineId, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindingType, TextureFormat, TextureViewDimension, BufferBindingType, BufferSize, PipelineCache, ComputePipelineDescriptor, CachedPipelineState, ComputePassDescriptor, VertexState, VertexBufferLayout, VertexStepMode, VertexAttribute, VertexFormat, RenderPipelineDescriptor, FragmentState, PrimitiveState, MultisampleState, ColorTargetState, ColorWrites, CachedRenderPipelineId, RenderPassDescriptor, RenderPassColorAttachment, Operations, TextureSampleType, IndexFormat}, render_asset::RenderAssets, renderer::{RenderDevice, RenderContext}, render_graph, texture::BevyDefault}};
+use bevy::{prelude::*, render::{render_resource::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, CachedComputePipelineId, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindingType, TextureFormat, BufferBindingType, PipelineCache, ComputePipelineDescriptor, CachedPipelineState, ComputePassDescriptor, VertexState, VertexBufferLayout, VertexStepMode, VertexAttribute, VertexFormat, RenderPipelineDescriptor, FragmentState, PrimitiveState, MultisampleState, ColorTargetState, ColorWrites, CachedRenderPipelineId, RenderPassDescriptor, RenderPassColorAttachment, Operations, IndexFormat}, render_asset::RenderAssets, renderer::{RenderDevice, RenderContext}, render_graph, texture::BevyDefault}};
 
-use super::{NUM_PARTICLES, WORKGROUP_SIZE, texture::ParticleLifeImage, buffers::ParticlesBuffer, ui::UISettings, settings::SettingsBuffer};
+use super::{MAX_PARTICLES, WORKGROUP_SIZE, texture::ParticleLifeImage, buffers::ParticlesBuffer, ui::UISettings, settings::SettingsBuffer};
 
 
 #[derive(Resource)]
@@ -11,8 +11,6 @@ struct ParticleLifeBindGroups(BindGroup, BindGroup, BindGroup);
 pub fn queue_bind_group(
     mut commands: Commands,
     pipeline: Res<ParticleLifePipeline>,
-    gpu_images: Res<RenderAssets<Image>>,
-    particle_life_image: Res<ParticleLifeImage>,
     particle_life_particle_buf: Res<ParticlesBuffer>,
     particle_life_settings: Res<SettingsBuffer>,
     render_device: Res<RenderDevice>,
@@ -36,14 +34,10 @@ pub fn queue_bind_group(
             resource: particle_life_settings.attraction_tables.binding().unwrap(),
         }],
     });
-    let view = &gpu_images[&particle_life_image.0];
     let bind_group_draw = render_device.create_bind_group(&BindGroupDescriptor {
         label: None,
         layout: &pipeline.render_layout,
         entries: &[BindGroupEntry {
-        //     binding: 0,
-        //     resource: BindingResource::TextureView(&view.texture_view),
-        // }, BindGroupEntry {
             binding: 1,
             resource: particle_life_settings.aspect_ratio.binding().unwrap(),
         }]
@@ -76,7 +70,8 @@ impl FromWorld for ParticleLifePipeline {
                                 read_only: false,
                             },
                             has_dynamic_offset: false,
-                            min_binding_size: BufferSize::new((NUM_PARTICLES * std::mem::size_of::<f32>() as u32 * 8) as u64),
+                            min_binding_size: None,
+                            // min_binding_size: BufferSize::new((MAX_PARTICLES * std::mem::size_of::<f32>() as u32 * 8) as u64),
                         },
                         count: None,
                     }]
@@ -285,7 +280,7 @@ impl render_graph::Node for ParticleLifeNode {
                         .get_compute_pipeline(pipeline.update_pipeline)
                         .unwrap();
                     compute_pass.set_pipeline(update_particles_pipeline);
-                    compute_pass.dispatch_workgroups(NUM_PARTICLES / WORKGROUP_SIZE, 1, 1);
+                    compute_pass.dispatch_workgroups(MAX_PARTICLES / WORKGROUP_SIZE, 1, 1);
                 }
             }
         }
@@ -308,7 +303,7 @@ impl render_graph::Node for ParticleLifeNode {
                 })],
                 depth_stencil_attachment: None,
             });
-            
+
             render_pass.set_bind_group(0, &aspect_ratio_bind_group, &[]);
             
             match self.state {
@@ -320,7 +315,7 @@ impl render_graph::Node for ParticleLifeNode {
                     render_pass.set_vertex_buffer(0, *particles_buf.staging.slice(..));
                     render_pass.set_vertex_buffer(1, *particles_buf.vertex_data.slice(..));
                     render_pass.set_index_buffer(*particles_buf.index_data.slice(..), IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..12, 0, 0..NUM_PARTICLES);
+                    render_pass.draw_indexed(0..12, 0, 0..MAX_PARTICLES);
                 },
                 _ => ()
             }

@@ -1,4 +1,4 @@
-use bevy::{prelude::*, render::{render_resource::{ShaderType, Buffer, BufferDescriptor, BufferUsages, BufferInitDescriptor}, renderer::RenderDevice}};
+use bevy::{prelude::*, render::{render_resource::{ShaderType, Buffer, BufferUsages, BufferInitDescriptor}, renderer::RenderDevice}};
 use bytemuck::{Pod, Zeroable};
 use rand::Rng;
 
@@ -6,7 +6,7 @@ use rand::Rng;
 
 use crate::particle_life::TEXTURE_SIZE;
 
-use super::{NUM_PARTICLES, NUM_PARTICLES_PER_TYPE, NUM_PARTICLE_TYPES};
+use super::{MAX_PARTICLES, INIT_NUM_TYPES, INIT_NUM_PARTICLES_PER_TYPE, ui::UISettings, MAX_PARTICLE_TYPES};
 
 
 #[derive(Debug, Clone, Copy, Reflect, ShaderType, Pod, Zeroable)]
@@ -41,14 +41,13 @@ pub struct ParticlesBuffer {
 impl FromWorld for ParticlesBuffer {
     fn from_world(world: &mut World) -> Self {
         let device = world.resource::<RenderDevice>();
-        let size = (NUM_PARTICLES * std::mem::size_of::<f32>() as u32 * 8) as u64;
-        let particles = create_particles();
+        let size = (MAX_PARTICLES * std::mem::size_of::<f32>() as u32 * 8) as u64;
+        let particles = create_particles(INIT_NUM_TYPES, INIT_NUM_PARTICLES_PER_TYPE);
         
-        let staging = device.create_buffer(&BufferDescriptor {
+        let staging = device.create_buffer_with_data(&BufferInitDescriptor {
             label: None,
-            size,
+            contents: bytemuck::cast_slice(&particles),
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST | BufferUsages::VERTEX,
-            mapped_at_creation: false,
         });
 
         let storage = device.create_buffer_with_data(&BufferInitDescriptor {
@@ -80,28 +79,37 @@ impl FromWorld for ParticlesBuffer {
     }
 }
 
-
-fn create_particles() -> [Particle; NUM_PARTICLES as usize] {
+pub fn create_particle_colors(n_types: u32) -> [[f32; 3]; MAX_PARTICLE_TYPES as usize] {
     const COLOR_A: Vec3 = Vec3::new(0.5, 0.5, 0.5);
     const COLOR_B: Vec3 = Vec3::new(0.5, 0.5, 0.5);
     const COLOR_C: Vec3 = Vec3::new(1.0, 1.0, 1.0);
     const COLOR_D: Vec3 = Vec3::new(0.0, 0.333, 0.667);
 
-    let mut particles = [Particle::new(); NUM_PARTICLES as usize];
-    let mut rng = rand::thread_rng();
-
-    for i in 0..NUM_PARTICLE_TYPES {
-        let t = i as f32 / NUM_PARTICLE_TYPES as f32;
+    let mut colors = [[0.0; 3]; MAX_PARTICLE_TYPES as usize];
+    for i in 0..n_types {
+        let t = i as f32 / n_types as f32;
         let c1 = std::f32::consts::TAU * (COLOR_C * t + COLOR_D);
         let c1cosx = c1.x.cos();
         let c1cosy = c1.y.cos();
         let c1cosz = c1.z.cos();
         let color = COLOR_A + COLOR_B * Vec3::new(c1cosx, c1cosy, c1cosz);
-        for j in 0..NUM_PARTICLES_PER_TYPE {
-            particles[(i * NUM_PARTICLES_PER_TYPE + j) as usize] = Particle {
+        colors[i as usize] = [color.x, color.y, color.z];
+    };
+    return colors;
+}
+
+fn create_particles(n_types: u32, n_per_type: u32) -> [Particle; MAX_PARTICLES as usize] {
+    let mut particles = [Particle::new(); MAX_PARTICLES as usize];
+    let mut rng = rand::thread_rng();
+    let colors = create_particle_colors(n_types);
+
+    for i in 0..n_types {
+        let color = colors[i as usize];
+        for j in 0..n_per_type {
+            particles[(i * n_per_type + j) as usize] = Particle {
                 pos: [rng.gen_range(0f32..(TEXTURE_SIZE.0 as f32 / TEXTURE_SIZE.1 as f32)), rng.gen_range(0f32..1f32)],
                 vel: [0.0, 0.0],
-                color: [color.x, color.y, color.z],
+                color,
                 type_idx: i,
             };
         }
@@ -130,4 +138,19 @@ fn create_hexagon_data() -> (&'static [f32], &'static [u32]) {
     ];
 
     (&VERTICES, &INDICES)
+}
+
+pub fn write_particles_buffer(
+    mut particles_buf: ResMut<ParticlesBuffer>,
+    ui_settings: Res<UISettings>,
+    render_device: Res<RenderDevice>,
+) {
+    if ui_settings.particle_count_changed {
+        let particles = create_particles(ui_settings.num_particle_types, ui_settings.num_particles_per_type);
+        particles_buf.storage = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&particles),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+        });
+    }
 }

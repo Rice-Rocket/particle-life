@@ -20,7 +20,6 @@ struct SettingsUniform {
     maxR: f32,
     friction: f32,
     speed: f32,
-    flatForce: i32,
     wrap: i32,
 // #ifdef SIXTEEN_BYTE_ALIGNMENT
 //     _padding: vec3<f32>,

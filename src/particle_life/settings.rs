@@ -1,6 +1,6 @@
 use bevy::{prelude::*, render::{render_resource::{UniformBuffer, ShaderType, StorageBuffer}, Extract, renderer::{RenderDevice, RenderQueue}, extract_resource::ExtractResource}};
 
-use super::{ui::UISettings, NUM_PARTICLE_TYPES, NUM_PARTICLES, TEXTURE_SIZE};
+use super::{ui::UISettings, TEXTURE_SIZE, MAX_PARTICLE_TYPES};
 
 
 #[derive(Default, Clone, Resource, ExtractResource, Reflect, ShaderType)]
@@ -17,7 +17,6 @@ pub struct SettingsUniform {
     pub max_r: f32,
     pub friction: f32,
     pub speed: f32,
-    pub flat_force: i32,
     pub wrap: i32,
     
     // #[cfg(all(feature = "webgl", target_arch = "wasm32"))]
@@ -25,11 +24,21 @@ pub struct SettingsUniform {
 }
 
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct SettingsBuffer {
     pub settings: UniformBuffer<SettingsUniform>,
     pub aspect_ratio: UniformBuffer<f32>,
-    pub attraction_tables: StorageBuffer<[f32; (NUM_PARTICLE_TYPES * NUM_PARTICLE_TYPES) as usize]>,
+    pub attraction_tables: StorageBuffer<[f32; (MAX_PARTICLE_TYPES * MAX_PARTICLE_TYPES) as usize]>,
+}
+
+impl Default for SettingsBuffer {
+    fn default() -> Self {
+        Self {
+            settings: UniformBuffer::default(),
+            aspect_ratio: UniformBuffer::default(),
+            attraction_tables: StorageBuffer::from([0.0; (MAX_PARTICLE_TYPES * MAX_PARTICLE_TYPES) as usize]),
+        }
+    }
 }
 
 pub fn extract_time(mut commands: Commands, time: Extract<Res<Time>>) {
@@ -56,20 +65,17 @@ pub fn prepare_settings_buffer(
     settings_uniform.time = time.elapsed_seconds();
     settings_uniform.inv_aspect_ratio = 1.0 / aspect_ratio_val;
     
-    settings_uniform.n_types = NUM_PARTICLE_TYPES;
-    settings_uniform.n_particles = NUM_PARTICLES;
+    settings_uniform.n_types = settings.num_particle_types;
+    settings_uniform.n_particles = settings.num_particle_types * settings.num_particles_per_type;
 
-    settings_uniform.min_r = 0.3;
-    settings_uniform.max_r = 0.3;
-    settings_uniform.friction = 0.1;
-    settings_uniform.speed = 10.0;
-    settings_uniform.wrap = 1;
+    settings_uniform.min_r = settings.min_r;
+    settings_uniform.max_r = settings.max_r;
+    settings_uniform.friction = 1.0 - settings.friction;
+    settings_uniform.speed = settings.speed;
+    settings_uniform.wrap = if settings.wrap { 1 } else { 0 };
 
     let attractions = settings_buffer.attraction_tables.get_mut();
-    attractions[0] = 1.0;
-    attractions[1] = -1.0;
-    attractions[2] = 0.2;
-    attractions[3] = 0.0;
+    *attractions = settings.attraction_table;
     // Row is attracted to column
 
     settings_buffer.attraction_tables.write_buffer(&device, &queue);
