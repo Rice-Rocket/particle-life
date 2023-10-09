@@ -1,6 +1,6 @@
 mod particle_life;
 use bevy_egui::EguiPlugin;
-use particle_life::{*, ui::{ui_update, UIVisibility, UISettings}};
+use particle_life::{*, ui::{ui_update, UIVisibility, UISettings, ui_render_update, ui_particles_update}};
 
 
 #[allow(unused_imports)]
@@ -28,7 +28,7 @@ fn main() {
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
                     // uncomment for unthrottled FPS
-                    // present_mode: bevy::window::PresentMode::AutoNoVsync,
+                    present_mode: bevy::window::PresentMode::AutoNoVsync,
                     title: String::from("Particle Life"),
                     ..default()
                 }),
@@ -37,7 +37,7 @@ fn main() {
             ParticleLifeComputePlugin,
             EguiPlugin,
         ))
-        .add_systems(Update, ui_update)
+        .add_systems(Update, (ui_update, ui_render_update, ui_particles_update))
         .run();
 }
 

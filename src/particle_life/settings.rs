@@ -70,13 +70,12 @@ pub fn prepare_settings_buffer(
 
     settings_uniform.min_r = settings.min_r;
     settings_uniform.max_r = settings.max_r;
-    settings_uniform.friction = 1.0 - settings.friction;
+    settings_uniform.friction = 0.5f32.powf(settings_uniform.delta_time / settings.friction_half_time);
     settings_uniform.speed = settings.speed;
     settings_uniform.wrap = if settings.wrap { 1 } else { 0 };
 
     let attractions = settings_buffer.attraction_tables.get_mut();
     *attractions = settings.attraction_table;
-    // Row is attracted to column
 
     settings_buffer.attraction_tables.write_buffer(&device, &queue);
     settings_buffer.settings.write_buffer(&device, &queue);

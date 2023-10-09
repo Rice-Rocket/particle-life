@@ -6,7 +6,7 @@ use rand::Rng;
 
 use crate::particle_life::TEXTURE_SIZE;
 
-use super::{MAX_PARTICLES, INIT_NUM_TYPES, INIT_NUM_PARTICLES_PER_TYPE, ui::UISettings, MAX_PARTICLE_TYPES};
+use super::{MAX_PARTICLES, INIT_NUM_TYPES, INIT_NUM_PARTICLES_PER_TYPE, ui::UISettings, MAX_PARTICLE_TYPES, INIT_PARTICLE_RADIUS};
 
 
 #[derive(Debug, Clone, Copy, Reflect, ShaderType, Pod, Zeroable)]
@@ -56,7 +56,7 @@ impl FromWorld for ParticlesBuffer {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
         });
 
-        let (vertices, indices) = create_hexagon_data();
+        let (vertices, indices) = create_hexagon_data(INIT_PARTICLE_RADIUS);
         let vertex_data = device.create_buffer_with_data(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&vertices),
@@ -119,25 +119,25 @@ fn create_particles(n_types: u32, n_per_type: u32) -> [Particle; MAX_PARTICLES a
 }
 
 
-fn create_hexagon_data() -> (&'static [f32], &'static [u32]) {
-    const RADIUS: f32 = 0.01;
-    const HALF_R: f32 = RADIUS / 2.0;
-    const APOTHEM: f32 = 1.73205081 * HALF_R;
+fn create_hexagon_data(mut radius: f32) -> ([f32; 12], [u32; 12]) {
+    radius /= 100.0;
+    let half_r: f32 = radius / 2.0;
+    let apothem: f32 = 1.73205081 * half_r;
 
-    static VERTICES: [f32; 12] = [
-        -HALF_R, APOTHEM, HALF_R, APOTHEM,
-        RADIUS, 0.0, HALF_R, -APOTHEM,
-        -HALF_R, -APOTHEM, -RADIUS, 0.0,
+    let vertices: [f32; 12] = [
+        -half_r, apothem, half_r, apothem,
+        radius, 0.0, half_r, -apothem,
+        -half_r, -apothem, -radius, 0.0,
     ];
 
-    static INDICES: [u32; 12] = [
+    let indices: [u32; 12] = [
         0, 2, 1, 
         0, 3, 2,
         0, 4, 3, 
         0, 5, 4,
     ];
 
-    (&VERTICES, &INDICES)
+    (vertices, indices)
 }
 
 pub fn write_particles_buffer(
@@ -145,12 +145,33 @@ pub fn write_particles_buffer(
     ui_settings: Res<UISettings>,
     render_device: Res<RenderDevice>,
 ) {
-    if ui_settings.particle_count_changed {
+    if ui_settings.particle_count_changed || ui_settings.just_reset {
         let particles = create_particles(ui_settings.num_particle_types, ui_settings.num_particles_per_type);
         particles_buf.storage = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&particles),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
         });
+    }
+}
+
+pub fn write_vertex_buffer(
+    mut particles_buf: ResMut<ParticlesBuffer>,
+    ui_settings: Res<UISettings>,
+    render_device: Res<RenderDevice>,
+) {
+    if ui_settings.particle_size_changed {
+        let (vertices, _indices) = create_hexagon_data(ui_settings.particle_size);
+        particles_buf.vertex_data = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&vertices),
+            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+        });
+
+        // particles_buf.index_data = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        //     label: None,
+        //     contents: bytemuck::cast_slice(&indices),
+        //     usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
+        // });
     }
 }
