@@ -1,6 +1,9 @@
-use bevy::{prelude::*, window::PrimaryWindow, render::{render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages}, extract_resource::ExtractResource}};
+use bevy::{prelude::*, window::PrimaryWindow, render::{render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages}, extract_resource::ExtractResource}, core_pipeline::tonemapping::Tonemapping};
 
 use super::TEXTURE_SIZE;
+
+#[derive(Component)]
+pub struct ParticleLifeOutputImageEntity {}
 
 pub fn setup_texture(
     mut commands: Commands, 
@@ -23,15 +26,23 @@ pub fn setup_texture(
 
     let window = window_query.get_single().unwrap();
 
-    commands.spawn(SpriteBundle {
+    commands.spawn((SpriteBundle {
         sprite: Sprite {
             custom_size: Some(Vec2::new(window.width(), window.height())),
+            color: Color::rgb(1.0, 1.0, 1.0),
             ..default()
         },
         texture: image.clone(),
         ..default()
+    }, ParticleLifeOutputImageEntity {}));
+    commands.spawn(Camera2dBundle {
+        camera: Camera {
+            hdr: true,
+            ..default()
+        },
+        tonemapping: Tonemapping::None,
+        ..default()
     });
-    commands.spawn(Camera2dBundle::default());
 
     commands.insert_resource(ParticleLifeImage(image));
 }

@@ -167,11 +167,5 @@ pub fn write_vertex_buffer(
             contents: bytemuck::cast_slice(&vertices),
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
         });
-
-        // particles_buf.index_data = render_device.create_buffer_with_data(&BufferInitDescriptor {
-        //     label: None,
-        //     contents: bytemuck::cast_slice(&indices),
-        //     usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
-        // });
     }
 }

@@ -1,8 +1,8 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, core_pipeline::bloom::{BloomSettings, BloomCompositeMode}};
 use bevy_egui::{egui, EguiContexts};
 use rand::{Rng, thread_rng};
 
-use super::{INIT_NUM_TYPES, INIT_NUM_PARTICLES_PER_TYPE, MAX_PARTICLE_TYPES, buffers::create_particle_colors, MAX_PARTICLES_PER_TYPE};
+use super::{INIT_NUM_TYPES, INIT_NUM_PARTICLES_PER_TYPE, MAX_PARTICLE_TYPES, buffers::create_particle_colors, MAX_PARTICLES_PER_TYPE, texture::ParticleLifeOutputImageEntity};
 
 
 #[derive(Resource, Default, PartialEq, Clone)]
@@ -21,6 +21,7 @@ pub struct UISettings {
     pub ptype_colors: [[f32; 3]; MAX_PARTICLE_TYPES as usize],
 
     pub particle_size: f32,
+    pub prev_bloom_settings: Option<BloomSettings>,
 
     pub min_r: f32,
     pub max_r: f32,
@@ -45,6 +46,12 @@ impl Default for UISettings {
             ptype_colors: [[1.0, 0.25090736, 0.25090742]; MAX_PARTICLE_TYPES as usize],
 
             particle_size: 1.0,
+            prev_bloom_settings: Some(BloomSettings {
+                intensity: 0.1,
+                low_frequency_boost: 0.9,
+                high_pass_frequency: 0.4,
+                ..default()
+            }),
 
             min_r: 0.3,
             max_r: 0.3,
@@ -63,12 +70,16 @@ impl Default for UISettings {
 
 
 pub fn ui_render_update(
+    mut commands: Commands,
     mut contexts: EguiContexts,
     ui_visibility: Res<UIVisibility>,
     mut settings: ResMut<UISettings>,
+    mut camera: Query<(Entity, Option<&mut BloomSettings>), With<Camera>>,
+    mut out_img_query: Query<&mut Sprite, With<ParticleLifeOutputImageEntity>>,
 ) {
     settings.particle_size_changed = false;
     if ui_visibility.clone() == UIVisibility::Hidden { return; }
+    let bloom_settings = camera.single_mut();
 
     egui::Window::new("Render Settings").show(contexts.ctx_mut(), |ui| {
         ui.horizontal(|ui| {
@@ -79,6 +90,51 @@ pub fn ui_render_update(
                 settings.particle_size_changed = true;
             }
         });
+
+        match bloom_settings {
+            (entity, Some(mut bloom)) => {
+                let mut bloom_enabled = true;
+                ui.checkbox(&mut bloom_enabled, "Bloom Enabled");
+                if !bloom_enabled {
+                    settings.prev_bloom_settings = Some(bloom.clone());
+                    out_img_query.single_mut().color = Color::rgb(1.0, 1.0, 1.0);
+                    commands.entity(entity).remove::<BloomSettings>();
+                }
+
+                ui.horizontal(|ui| {
+                    ui.label("Intensity:");
+                    ui.add(egui::widgets::DragValue::new(&mut bloom.intensity).clamp_range(0f32..=1f32).speed(0.025).min_decimals(2));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Low Frequency Boost:");
+                    ui.add(egui::widgets::DragValue::new(&mut bloom.low_frequency_boost).clamp_range(0f32..=1f32).speed(0.025).min_decimals(2));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("High Frequency Boost:");
+                    ui.add(egui::widgets::DragValue::new(&mut bloom.high_pass_frequency).clamp_range(0f32..=1f32).speed(0.025).min_decimals(2));
+                });
+                ui.horizontal(|ui| {
+                    let mut energy_conserving = bloom.composite_mode == BloomCompositeMode::EnergyConserving;
+                    ui.add(egui::widgets::Checkbox::new(&mut energy_conserving, "Energy Conserving"));
+                    bloom.composite_mode = if energy_conserving { BloomCompositeMode::EnergyConserving } else { BloomCompositeMode::Additive };
+                });
+            }
+            (entity, None) => {
+                let mut bloom_enabled = false;
+                ui.checkbox(&mut bloom_enabled, "Bloom Enabled");
+                if bloom_enabled {
+                    let bloom_settings = match settings.prev_bloom_settings.clone() {
+                        Some(bloom) => bloom,
+                        _ => BloomSettings::default(),
+                    };
+                    out_img_query.single_mut().color = Color::rgb(5.0, 5.0, 5.0);
+                    commands.entity(entity).insert(bloom_settings);
+                }
+            }
+            #[allow(unreachable_patterns)]
+            _ => ()
+        }
+
     });
 }
 
